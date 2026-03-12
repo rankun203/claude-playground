@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Affordable Sydney Suburbs</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f0f2f5;
+    }
+
+    #map { height: 100vh; width: 100%; }
+
+    /* ── Loading overlay ── */
+    #loading {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255,255,255,0.82);
+      backdrop-filter: blur(6px);
+      z-index: 2000;
+    }
+
+    .loader-card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 28px 36px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+      text-align: center;
+      min-width: 260px;
+    }
+
+    .loader-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #1a1a2e;
+      margin-bottom: 4px;
+    }
+
+    .loader-subtitle {
+      font-size: 12px;
+      color: #888;
+      margin-bottom: 16px;
+    }
+
+    #loader-status {
+      font-size: 12px;
+      color: #555;
+      margin-bottom: 10px;
+      min-height: 18px;
+    }
+
+    .progress-track {
+      width: 100%;
+      height: 6px;
+      background: #eee;
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    #progress-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #27ae60, #f39c12, #e74c3c);
+      border-radius: 3px;
+      transition: width 0.4s ease;
+    }
+
+    /* ── Title panel ── */
+    .title-panel {
+      position: absolute;
+      top: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #fff;
+      padding: 10px 22px;
+      border-radius: 12px;
+      box-shadow: 0 2px 16px rgba(0,0,0,0.13);
+      z-index: 1000;
+      text-align: center;
+      white-space: nowrap;
+      pointer-events: none;
+    }
+
+    .title-panel h2 {
+      font-size: 15px;
+      font-weight: 700;
+      color: #1a1a2e;
+      margin-bottom: 1px;
+    }
+
+    .title-panel p {
+      font-size: 11px;
+      color: #888;
+    }
+
+    /* ── Legend ── */
+    .legend {
+      position: absolute;
+      bottom: 28px;
+      right: 12px;
+      background: #fff;
+      padding: 14px 16px;
+      border-radius: 12px;
+      box-shadow: 0 2px 16px rgba(0,0,0,0.13);
+      z-index: 1000;
+      min-width: 190px;
+    }
+
+    .legend h4 {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: #555;
+      margin-bottom: 9px;
+    }
+
+    .legend-bar {
+      height: 10px;
+      border-radius: 5px;
+      background: linear-gradient(90deg,
+        hsl(120,68%,40%),
+        hsl(75,68%,40%),
+        hsl(38,78%,48%),
+        hsl(18,75%,50%)
+      );
+      margin-bottom: 5px;
+    }
+
+    .legend-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: #888;
+    }
+
+    .legend-rows {
+      margin-top: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .legend-row {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 11px;
+      color: #444;
+    }
+
+    .legend-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    /* ── Suburb popup ── */
+    .leaflet-popup-content-wrapper {
+      border-radius: 12px !important;
+      box-shadow: 0 6px 24px rgba(0,0,0,0.16) !important;
+      padding: 0 !important;
+      overflow: hidden;
+    }
+
+    .leaflet-popup-content {
+      margin: 0 !important;
+    }
+
+    .leaflet-popup-tip-container { display: none; }
+
+    .s-popup {
+      min-width: 200px;
+    }
+
+    .s-popup-header {
+      padding: 12px 16px 10px;
+    }
+
+    .s-popup h3 {
+      font-size: 15px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 2px;
+    }
+
+    .s-popup .rank-tag {
+      font-size: 10px;
+      color: rgba(255,255,255,0.8);
+      font-weight: 500;
+    }
+
+    .s-popup-body {
+      padding: 12px 16px 14px;
+      background: #fff;
+    }
+
+    .s-popup .price {
+      font-size: 22px;
+      font-weight: 800;
+      color: #1a1a2e;
+      line-height: 1;
+      margin-bottom: 8px;
+    }
+
+    .s-popup .metrics {
+      display: flex;
+      gap: 8px;
+    }
+
+    .metric-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 4px 9px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .pill-positive { background: #e8f5e9; color: #2e7d32; }
+    .pill-negative { background: #fce4ec; color: #b71c1c; }
+
+    /* ── Suburb labels ── */
+    .suburb-label {
+      background: transparent !important;
+      border: none !important;
+      box-shadow: none !important;
+      color: #fff;
+      font-size: 10px;
+      font-weight: 700;
+      text-align: center;
+      text-shadow: 0 1px 4px rgba(0,0,0,0.7), 0 0 8px rgba(0,0,0,0.4);
+      white-space: nowrap;
+      pointer-events: none;
+      line-height: 1.35;
+    }
+
+    .suburb-label::before { display: none !important; }
+  </style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<!-- Loading overlay -->
+<div id="loading">
+  <div class="loader-card">
+    <div class="loader-title">Loading Suburb Map</div>
+    <div class="loader-subtitle">Fetching real suburb boundaries…</div>
+    <div id="loader-status">Starting…</div>
+    <div class="progress-track">
+      <div id="progress-bar"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Title -->
+<div class="title-panel">
+  <h2>Most Affordable Sydney Suburbs</h2>
+  <p>Median unit price under $500,000 · Click a suburb for details</p>
+</div>
+
+<!-- Legend -->
+<div class="legend">
+  <h4>Median Unit Price</h4>
+  <div class="legend-bar"></div>
+  <div class="legend-labels">
+    <span>$425K</span>
+    <span>$460K</span>
+    <span>$497K</span>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const SUBURBS = [
+  { name: "Kingswood",     price: 425000, growth: -13.3 },
+  { name: "Mount Druitt",  price: 432500, growth:   5.5 },
+  { name: "Cabramatta",    price: 435500, growth:   3.7 },
+  { name: "Fairfield",     price: 442500, growth:   2.1 },
+  { name: "Blacktown",     price: 448500, growth:  -3.5 },
+  { name: "Guildford",     price: 469000, growth:   2.4 },
+  { name: "Warwick Farm",  price: 480000, growth:   6.7 },
+  { name: "Wiley Park",    price: 481000, growth:   7.7 },
+  { name: "Harris Park",   price: 490000, growth: -10.9 },
+  { name: "Lakemba",       price: 496500, growth:   7.9 },
+];
+
+// ── Map init ─────────────────────────────────────────────
+const map = L.map('map', { zoomControl: true });
+
+// CartoDB Positron — clean, elegant
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+  subdomains: 'abcd',
+  maxZoom: 20,
+}).addTo(map);
+
+// Bounds: western suburbs (Kingswood) → Sydney CBD
+map.fitBounds([[-33.95, 150.67], [-33.75, 151.28]]);
+
+// ── Colour scale ──────────────────────────────────────────
+function priceColor(price) {
+  const min = 425000, max = 496500;
+  const t = (price - min) / (max - min);   // 0 → 1
+  const h = Math.round(120 - t * 100);     // 120 (green) → 20 (orange-red)
+  const s = 68 + t * 10;
+  const l = 40 + t * 8;
+  return `hsl(${h},${s}%,${l}%)`;
+}
+
+function darken(hslStr, amount = 12) {
+  // Quick hsl darkener: parse and reduce L
+  const m = hslStr.match(/hsl\((\d+),(\d+(?:\.\d+)?)%,(\d+(?:\.\d+)?)%\)/);
+  if (!m) return hslStr;
+  return `hsl(${m[1]},${m[2]}%,${Math.max(0, +m[3] - amount)}%)`;
+}
+
+// ── Popup factory ─────────────────────────────────────────
+function buildPopup(suburb, color) {
+  const rank = SUBURBS.indexOf(suburb) + 1;
+  const sign  = suburb.growth >= 0 ? '+' : '';
+  const arrow = suburb.growth >= 0 ? '↑' : '↓';
+  const pillClass = suburb.growth >= 0 ? 'pill-positive' : 'pill-negative';
+
+  return `
+    <div class="s-popup">
+      <div class="s-popup-header" style="background:${color}">
+        <h3>${suburb.name}</h3>
+        <div class="rank-tag">#${rank} most affordable · NSW unit market</div>
+      </div>
+      <div class="s-popup-body">
+        <div class="price">$${suburb.price.toLocaleString()}</div>
+        <div class="metrics">
+          <span class="metric-pill ${pillClass}">
+            ${arrow} ${Math.abs(suburb.growth)}%&nbsp;<span style="font-weight:400;opacity:.8">annual growth</span>
+          </span>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ── Fetch real suburb boundary via Nominatim ──────────────
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+async function fetchBoundary(suburb) {
+  const q = `${suburb.name}, New South Wales, Australia`;
+  const url = 'https://nominatim.openstreetmap.org/search?' + new URLSearchParams({
+    q,
+    format: 'json',
+    polygon_geojson: '1',
+    limit: '10',
+    countrycodes: 'au',
+  });
+
+  const res  = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+  const data = await res.json();
+
+  // Prefer suburb/place/locality hits that have a real polygon (not just a Point)
+  const isPolygon = r => r.geojson && r.geojson.type !== 'Point' && r.geojson.type !== 'LineString';
+  const hit = data.find(r => isPolygon(r) && ['suburb','quarter','neighbourhood','town','village'].includes(r.type))
+           || data.find(r => isPolygon(r));
+
+  return hit ? hit.geojson : null;
+}
+
+// ── Draw suburb polygon + label ───────────────────────────
+function addSuburb(suburb, geojson) {
+  const color = priceColor(suburb.price);
+
+  const layer = L.geoJSON(geojson, {
+    style: {
+      fillColor: color,
+      fillOpacity: 0.52,
+      color: darken(color),
+      weight: 2.2,
+      opacity: 0.9,
+    },
+  }).addTo(map);
+
+  // Highlight on hover
+  layer.on('mouseover', () => {
+    layer.setStyle({ fillOpacity: 0.72, weight: 3 });
+    layer.openPopup();
+  });
+  layer.on('mouseout', () => {
+    layer.setStyle({ fillOpacity: 0.52, weight: 2.2 });
+  });
+
+  layer.bindPopup(buildPopup(suburb, color), {
+    maxWidth: 240,
+    closeButton: false,
+    autoPan: false,
+  });
+
+  // Permanent label centred on polygon
+  const center = layer.getBounds().getCenter();
+  L.marker(center, {
+    icon: L.divIcon({
+      className: 'suburb-label',
+      html: `<div>${suburb.name}<br><small style="font-weight:500;opacity:.9">$${(suburb.price/1000).toFixed(0)}K</small></div>`,
+      iconSize: [110, 30],
+      iconAnchor: [55, 15],
+    }),
+    interactive: false,
+    zIndexOffset: -1,
+  }).addTo(map);
+}
+
+// ── Main loader ───────────────────────────────────────────
+async function loadAll() {
+  const total = SUBURBS.length;
+  for (let i = 0; i < total; i++) {
+    const suburb = SUBURBS[i];
+
+    document.getElementById('loader-status').textContent =
+      `(${i + 1}/${total}) Fetching ${suburb.name}…`;
+    document.getElementById('progress-bar').style.width =
+      `${((i) / total) * 100}%`;
+
+    try {
+      const geojson = await fetchBoundary(suburb);
+      if (geojson) {
+        addSuburb(suburb, geojson);
+      } else {
+        console.warn('No boundary found for', suburb.name);
+      }
+    } catch (e) {
+      console.error('Error loading', suburb.name, e);
+    }
+
+    // Nominatim usage policy: max 1 req/sec
+    if (i < total - 1) await sleep(1100);
+  }
+
+  document.getElementById('progress-bar').style.width = '100%';
+  await sleep(350);
+  document.getElementById('loading').style.display = 'none';
+}
+
+loadAll();
+</script>
+</body>
+</html>
